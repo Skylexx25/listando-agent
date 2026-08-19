@@ -114,16 +114,39 @@ async function submitOffer(page, inquiryId, offerText, price) {
   console.log(`✅ Angebot gesendet — Anfrage ${inquiryId} | ${price}€`);
 }
 
+async function login(page) {
+  const email = process.env.LISTANDO_EMAIL;
+  const password = process.env.LISTANDO_PASSWORD;
+  if (!email || !password) throw new Error('LISTANDO_EMAIL oder LISTANDO_PASSWORD fehlt');
+
+  await page.goto('https://app.listando.com/login', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1500);
+
+  // Fill email
+  const emailField = page.locator('input[type="email"], input[name="email"], input[placeholder*="mail" i]').first();
+  await emailField.fill(email);
+
+  // Fill password
+  const pwField = page.locator('input[type="password"]').first();
+  await pwField.fill(password);
+
+  // Submit
+  await page.locator('button[type="submit"], button:has-text("Einloggen"), button:has-text("Anmelden"), button:has-text("Login")').first().click();
+  await page.waitForTimeout(3000);
+
+  const url = page.url();
+  if (!url.includes('/experte')) throw new Error('Login fehlgeschlagen — URL: ' + url);
+  console.log('✅ Eingeloggt');
+}
+
 async function runAgent() {
   console.log(`\n🤖 Cloud-Agent gestartet — ${new Date().toLocaleString('de-DE')}`);
 
-  const cookiesRaw = process.env.LISTANDO_COOKIES;
-  if (!cookiesRaw) {
-    console.error('❌ LISTANDO_COOKIES fehlt in Env-Vars');
+  if (!process.env.LISTANDO_EMAIL || !process.env.LISTANDO_PASSWORD) {
+    console.error('❌ LISTANDO_EMAIL oder LISTANDO_PASSWORD fehlt in Env-Vars');
     return;
   }
 
-  const cookies = JSON.parse(cookiesRaw);
   const state = loadState();
 
   const browser = await chromium.launch({
@@ -135,18 +158,9 @@ async function runAgent() {
     const context = await browser.newContext({
       userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     });
-    await context.addCookies(cookies);
     const page = await context.newPage();
 
-    await page.goto('https://app.listando.com/experte/moeglichkeiten', { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(2000);
-
-    const url = page.url();
-    if (!url.includes('app.listando.com/experte')) {
-      console.log('❌ Nicht eingeloggt — Cookies abgelaufen, neu exportieren');
-      global.lastStatus = 'cookies_expired';
-      return;
-    }
+    await login(page);
 
     const inquiriesWithAge = await getInquiriesWithAge(page);
     console.log(`📋 ${inquiriesWithAge.length} Anfragen gefunden`);
