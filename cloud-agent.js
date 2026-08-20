@@ -119,44 +119,50 @@ async function login(page) {
   const password = process.env.LISTANDO_PASSWORD;
   if (!email || !password) throw new Error('LISTANDO_EMAIL oder LISTANDO_PASSWORD fehlt');
 
-  await page.goto('https://app.listando.com/login', { waitUntil: 'networkidle', timeout: 60000 });
+  // Navigate to experte area — without session, Next.js redirects to login form automatically
+  await page.goto('https://app.listando.com/experte/moeglichkeiten', { waitUntil: 'networkidle', timeout: 60000 });
   await page.waitForTimeout(3000);
 
-  console.log('🌐 Login-URL:', page.url());
+  const urlAfterNav = page.url();
+  console.log('🌐 URL nach Navigation:', urlAfterNav);
   console.log('📄 Titel:', await page.title());
 
+  // Already logged in?
+  if (urlAfterNav.includes('/experte/moeglichkeiten')) {
+    console.log('✅ Bereits eingeloggt');
+    return;
+  }
+
+  // Find login form (wherever the app redirected us)
   const emailSelector = 'input[type="email"], input[name="email"], input[placeholder*="mail" i], input[autocomplete="email"]';
 
   try {
     await page.waitForSelector(emailSelector, { timeout: 30000, state: 'visible' });
   } catch {
     const html = await page.content();
-    console.error('❌ Email-Feld nicht gefunden. Seiten-HTML (erste 1000 Zeichen):\n' + html.substring(0, 1000));
-    // Fallback: jedes sichtbare Input-Feld
+    console.error('❌ Login-Formular nicht gefunden. Aktuelle URL:', page.url());
+    console.error('Seiten-HTML (erste 1500 Zeichen):\n' + html.substring(0, 1500));
+    // Last resort: use any visible input
     await page.waitForSelector('input:not([type="hidden"])', { timeout: 15000, state: 'visible' });
     const inputs = await page.locator('input:not([type="hidden"])').all();
-    console.log(`   ${inputs.length} Input-Felder gefunden`);
-    if (inputs.length > 0) {
+    console.log(`   ${inputs.length} Input-Felder gefunden (Fallback)`);
+    if (inputs.length >= 2) {
       await inputs[0].fill(email);
-      if (inputs.length > 1) await inputs[1].fill(password);
+      await inputs[1].fill(password);
       await page.keyboard.press('Enter');
-      await page.waitForTimeout(5000);
-      const url = page.url();
-      if (!url.includes('/experte')) throw new Error('Login fehlgeschlagen (Fallback) — URL: ' + url);
+      await page.waitForURL('**/experte/**', { timeout: 15000 });
       console.log('✅ Eingeloggt (Fallback)');
       return;
     }
-    throw new Error('Keine Input-Felder auf Login-Seite gefunden');
+    throw new Error('Kein Login-Formular gefunden auf: ' + page.url());
   }
 
   await page.locator(emailSelector).first().fill(email);
   await page.locator('input[type="password"]').first().fill(password);
-  await page.locator('button[type="submit"], button:has-text("Einloggen"), button:has-text("Anmelden"), button:has-text("Login")').first().click();
-  await page.waitForTimeout(5000);
+  await page.locator('button[type="submit"], button:has-text("Einloggen"), button:has-text("Anmelden"), button:has-text("Login"), button:has-text("Sign in")').first().click();
 
-  const url = page.url();
-  if (!url.includes('/experte')) throw new Error('Login fehlgeschlagen — URL: ' + url);
-  console.log('✅ Eingeloggt');
+  await page.waitForURL('**/experte/**', { timeout: 20000 });
+  console.log('✅ Eingeloggt — URL:', page.url());
 }
 
 async function runAgent() {
