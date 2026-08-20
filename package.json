@@ -13,10 +13,10 @@
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.118.0",
     "chrome-cookies-secure": "^3.0.2",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "groq-sdk": "^1.5.0",
     "node-cron": "^4.6.0",
     "playwright": "^1.62.1"
   }

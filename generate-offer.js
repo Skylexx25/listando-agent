@@ -1,6 +1,6 @@
-const Anthropic = require('@anthropic-ai/sdk');
+const Groq = require('groq-sdk');
 
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const client = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 // Price logic based on inquiry type
 function estimatePrice(inquiry) {
@@ -73,13 +73,15 @@ Schreibe einen professionellen, persönlichen Angebotstext auf Deutsch (max. 4 S
 - Kein Telefon / E-Mail nennen (Plattformregel)
 - Authentisch & warm, nicht zu formal`;
 
-  const response = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
+  const response = await client.chat.completions.create({
+    model: 'groq/compound-mini',
     max_tokens: 300,
     messages: [{ role: 'user', content: prompt }]
   });
 
-  return response.content[0].text.trim();
+  const raw = response.choices[0].message.content.trim();
+  // Strip <think>...</think> reasoning blocks (Qwen/CoT models)
+  return raw.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
 }
 
 module.exports = { generateOfferText, estimatePrice };
