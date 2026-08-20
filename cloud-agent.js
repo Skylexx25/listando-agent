@@ -119,20 +119,40 @@ async function login(page) {
   const password = process.env.LISTANDO_PASSWORD;
   if (!email || !password) throw new Error('LISTANDO_EMAIL oder LISTANDO_PASSWORD fehlt');
 
-  await page.goto('https://app.listando.com/login', { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(1500);
-
-  // Fill email
-  const emailField = page.locator('input[type="email"], input[name="email"], input[placeholder*="mail" i]').first();
-  await emailField.fill(email);
-
-  // Fill password
-  const pwField = page.locator('input[type="password"]').first();
-  await pwField.fill(password);
-
-  // Submit
-  await page.locator('button[type="submit"], button:has-text("Einloggen"), button:has-text("Anmelden"), button:has-text("Login")').first().click();
+  await page.goto('https://app.listando.com/login', { waitUntil: 'networkidle', timeout: 60000 });
   await page.waitForTimeout(3000);
+
+  console.log('🌐 Login-URL:', page.url());
+  console.log('📄 Titel:', await page.title());
+
+  const emailSelector = 'input[type="email"], input[name="email"], input[placeholder*="mail" i], input[autocomplete="email"]';
+
+  try {
+    await page.waitForSelector(emailSelector, { timeout: 30000, state: 'visible' });
+  } catch {
+    const html = await page.content();
+    console.error('❌ Email-Feld nicht gefunden. Seiten-HTML (erste 1000 Zeichen):\n' + html.substring(0, 1000));
+    // Fallback: jedes sichtbare Input-Feld
+    await page.waitForSelector('input:not([type="hidden"])', { timeout: 15000, state: 'visible' });
+    const inputs = await page.locator('input:not([type="hidden"])').all();
+    console.log(`   ${inputs.length} Input-Felder gefunden`);
+    if (inputs.length > 0) {
+      await inputs[0].fill(email);
+      if (inputs.length > 1) await inputs[1].fill(password);
+      await page.keyboard.press('Enter');
+      await page.waitForTimeout(5000);
+      const url = page.url();
+      if (!url.includes('/experte')) throw new Error('Login fehlgeschlagen (Fallback) — URL: ' + url);
+      console.log('✅ Eingeloggt (Fallback)');
+      return;
+    }
+    throw new Error('Keine Input-Felder auf Login-Seite gefunden');
+  }
+
+  await page.locator(emailSelector).first().fill(email);
+  await page.locator('input[type="password"]').first().fill(password);
+  await page.locator('button[type="submit"], button:has-text("Einloggen"), button:has-text("Anmelden"), button:has-text("Login")').first().click();
+  await page.waitForTimeout(5000);
 
   const url = page.url();
   if (!url.includes('/experte')) throw new Error('Login fehlgeschlagen — URL: ' + url);
@@ -151,7 +171,13 @@ async function runAgent() {
 
   const browser = await chromium.launch({
     headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-blink-features=AutomationControlled',
+      '--disable-infobars',
+    ]
   });
 
   try {
